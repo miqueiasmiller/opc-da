@@ -3,3 +3,4 @@ opc-da.sdf
 Debug/
 ipch/
 opc-client/Debug/
+opc-client/opc-client.vcxproj.user
