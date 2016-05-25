@@ -3,6 +3,8 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio 2012
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "opc-client", "opc-client\opc-client.vcxproj", "{25F32DD1-5983-489A-836E-DE515A5931FE}"
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "gateway", "gateway\gateway.vcxproj", "{22369D76-9542-4FD5-BAB9-4FA915B3CF36}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Win32 = Debug|Win32
@@ -13,6 +15,10 @@ Global
 		{25F32DD1-5983-489A-836E-DE515A5931FE}.Debug|Win32.Build.0 = Debug|Win32
 		{25F32DD1-5983-489A-836E-DE515A5931FE}.Release|Win32.ActiveCfg = Release|Win32
 		{25F32DD1-5983-489A-836E-DE515A5931FE}.Release|Win32.Build.0 = Release|Win32
+		{22369D76-9542-4FD5-BAB9-4FA915B3CF36}.Debug|Win32.ActiveCfg = Debug|Win32
+		{22369D76-9542-4FD5-BAB9-4FA915B3CF36}.Debug|Win32.Build.0 = Debug|Win32
+		{22369D76-9542-4FD5-BAB9-4FA915B3CF36}.Release|Win32.ActiveCfg = Release|Win32
+		{22369D76-9542-4FD5-BAB9-4FA915B3CF36}.Release|Win32.Build.0 = Release|Win32
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

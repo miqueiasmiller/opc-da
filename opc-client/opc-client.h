@@ -13,9 +13,6 @@
 
 // This class is exported from the opc-client.dll
 class OPCCLIENT_API OPCClient {
-private:
-	~OPCClient();
-
 protected:
 	std::unique_ptr<IOPCServer> opcServer;
 	std::wstring const & opcServerName;
@@ -24,6 +21,9 @@ protected:
 	IOPCServer * GetOPCServer(std::wstring const & serverName);
 
 public:
+	// destructor...
+	~OPCClient();
+
+	// constructor...
 	OPCClient(std::wstring const & serverName);
-	// TODO: add your methods here.
 };

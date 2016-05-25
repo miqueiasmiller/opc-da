@@ -2,6 +2,10 @@
 
 OPCClient::~OPCClient()
 {
+	// Releases the OPC Server...
+	if (this->opcServer != nullptr)
+		this->opcServer->Release();
+
 	// Closes Microsoft COM library...
 	CoUninitialize();
 }
