@@ -15,13 +15,7 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <Text Include="ReadMe.txt" />
-  </ItemGroup>
-  <ItemGroup>
     <ClInclude Include="targetver.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="opc-client.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="opcda.h">
@@ -30,15 +24,18 @@
     <ClInclude Include="opcerror.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="opc_client.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="opc-client.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="dllmain.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="opcda_i.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="opc_client.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
