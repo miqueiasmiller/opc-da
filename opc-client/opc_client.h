@@ -9,12 +9,15 @@
 #include <string>
 #include <array>
 #include <memory>
+#include <functional>
 #include "opcda.h"
 
 using namespace std;
 
 namespace opc
 {
+	typedef function<void (string const &)> LogFunction;
+
 	struct OPCCLIENT_API ItemManagementGroup {
 		OPCHANDLE handle;
 		IOPCItemMgt * ptr;
@@ -25,6 +28,8 @@ namespace opc
 	protected:
 		// a pointer to the IUnknown interface...
 		IOPCServer * opcServer;
+
+		LogFunction logger;
 
 		unique_ptr<ItemManagementGroup> itemMgt;
 
@@ -37,6 +42,9 @@ namespace opc
 	public:
 		// destructor...
 		~OPCClient();
+
+		// constructor...
+		OPCClient(wstring const & serverName, LogFunction logger);
 
 		// constructor...
 		OPCClient(wstring const & serverName);

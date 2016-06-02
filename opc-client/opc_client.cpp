@@ -4,7 +4,7 @@ namespace opc
 {
 	OPCClient::~OPCClient()
 	{
-		// releases the Item Managemente Group...
+		// releases the Item Management Group...
 		if (itemMgt.get())
 			itemMgt->ptr->Release();
 
@@ -13,13 +13,23 @@ namespace opc
 			opcServer->Release();
 	}
 
-
-	OPCClient::OPCClient(wstring const & serverName) : opcServer(nullptr)
+	OPCClient::OPCClient(wstring const & serverName) : opcServer(nullptr), logger([](string const &){})
 	{
 		// gets an instance of the IOPCServer and assigns it to the instance variable...
 		opcServer = GetOPCServer(serverName);
 
-		// gets an instance of the managemente group...
+		// gets an instance of the item management group...
+		itemMgt = AddGroupItemManagement(opcServer, 1000);
+	}
+
+	OPCClient::OPCClient(wstring const & serverName, LogFunction logFunc) : opcServer(nullptr), logger(logFunc)
+	{
+		// gets an instance of the IOPCServer and assigns it to the instance variable...
+		logger(">> Initializing OPCServer.\r\n");
+		opcServer = GetOPCServer(serverName);
+
+		// gets an instance of the item management group...
+		logger(">> Adding the Item Management Group to the server.\r\n");
 		itemMgt = AddGroupItemManagement(opcServer, 1000);
 	}
 
