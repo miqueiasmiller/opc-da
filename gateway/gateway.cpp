@@ -29,7 +29,8 @@ void teste(const unsigned int n)
 
 	for (unsigned int i = 0; i < n; i++)
 	{
-		v.push_back(unique_ptr<OPCClient>(new OPCClient(L"Matrikon.OPC.Simulation.1")));
+		//v.push_back(unique_ptr<OPCClient>(new OPCClient(L"Matrikon.OPC.Simulation.1")));
+		v.push_back(unique_ptr<OPCClient>(new OPCClient(L"ECA.OPCDAServer211")));
 	}
 }
 
@@ -46,14 +47,24 @@ int main(int argc, char * argv[])
 
 	try
 	{
-		teste(1);
+		//teste(3);
+		unique_ptr<OPCClient> opc = make_unique<OPCClient>(L"ECA.OPCDAServer211");
+		
+		OPCHANDLE item = opc->AddItem(L"TAG0", VARENUM::VT_I8);
+
+		VARIANT result;
+		VariantInit(&result);
+
+		opc->ReadItem(item, result);
+
+		long a = result.lVal;
 
 		log("Uninitializing COM.");
 		OPCClient::Uninitialize();
 	}
 	catch (exception & e)
 	{
-		log ("An exception occurred: " + string(e.what()));
+		log("An exception occurred: " + string(e.what()));
 
 		log("Uninitializing COM.");
 		OPCClient::Uninitialize();
