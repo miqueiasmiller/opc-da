@@ -6,12 +6,14 @@
 #define OPCCLIENT_API __declspec(dllimport)
 #endif
 
-#include <string>
+
 #include <array>
-#include <memory>
 #include <functional>
-#include <vector>
+#include <memory>
+#include <sstream>
+#include <string>
 #include <unordered_map>
+#include <vector>
 #include "opcda.h"
 
 using namespace std;
@@ -70,7 +72,7 @@ namespace opc
 		HRESULT AddItem(wstring const & itemId, VARENUM type);
 
 		// reads the value of an item...
-		bool ReadItem(wstring const & itemId, VARIANT & output);
+		HRESULT ReadItem(wstring const & itemId, VARIANT & output);
 
 		// initializes COM...
 		static void Initialize(void);

@@ -106,21 +106,21 @@ namespace opc
 		// adds the items to the group.
 		HRESULT hr = group->ptr->AddItems(1, &item, &result, &errors);
 
-		char * msg;
+		ostringstream msg;
 
 		// if succeeds, adds the item to the map
-		if (hr = S_OK)
+		if (hr == S_OK)
 		{
 			// adds the item handle to the map...
 			items.emplace(itemId, Item{ result[0].hServer, result[0].vtCanonicalDataType });
-
-			sprintf(msg, ">> Item %s added to the group. Code: %x\r\n", itemId, hr);
-			logger(string(msg));
+			msg << ">> Item " << itemId.c_str() << " added to the group. Code: " << hr << endl;
+			//sprintf(msg, ">> Item %s added to the group. Code: %x\r\n", itemId, hr);
+			logger(msg.str());
 		}
 		else
 		{
-			sprintf(msg, ">> !!! An error occurred when trying to add items to the group. Error code: %x\r\n", hr);
-			logger(string(msg));
+			msg << ">> !!! An error occurred while trying to add the item '" << itemId.c_str() << "' to the group. Error code: " << hr << endl;
+			logger(msg.str());
 		}
 
 		// frees the memory allocated by the server.
@@ -134,12 +134,17 @@ namespace opc
 		return hr;
 	}
 
-	bool OPCClient::ReadItem(wstring const & itemId, VARIANT & output)
+	HRESULT OPCClient::ReadItem(wstring const & itemId, VARIANT & output)
 	{
+		ostringstream msg;
+
 		// checks if the itemId is already in the map. I yes, returns OK...
 		if (items.count(itemId) == 0)
 		{
-			return false;
+			msg << ">> The item '" << itemId.c_str() << "' already in the group." << endl;
+			logger(msg.str());
+
+			return S_OK;
 		}
 
 		// gets the item's handle from the map...
@@ -160,12 +165,10 @@ namespace opc
 
 		if (hr != S_OK || value == nullptr)
 		{
-			char * msg;
+			msg << ">> !! An error occurred while trying to read the item '" << itemId.c_str() << "'. Error code: " << hr << endl;
+			logger(msg.str());
 
-			sprintf(msg, ">> !! An error occurred when trying to add items to the group. Error code: %x\r\n", hr);
-			logger(string(msg));
-
-			return false;
+			return hr;
 		}
 
 		output = value[0].vDataValue;
@@ -181,7 +184,7 @@ namespace opc
 		syncIO->Release();
 		syncIO = nullptr;
 
-		return true;
+		return hr;
 	}
 
 	void OPCClient::Initialize(void)

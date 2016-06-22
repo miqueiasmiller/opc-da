@@ -1,9 +1,11 @@
-#include "targetver.h"
-#include "opc_client.h"
+#include <functional>
+#include <iostream>
 #include <memory>
 #include <string>
-#include <iostream>
 #include <vector>
+
+#include "targetver.h"
+#include "opc_client.h"
 
 using namespace opc;
 using namespace std;
@@ -14,9 +16,9 @@ void setupOptions(int argc, char * argv[])
 {
 	if (argc > 0)
 	{
-		for (int i = 0; i < argc; i++)
+		for (int i = 1; i < argc; i++)
 		{
-			if (argv[i] == "v" || argv[i] == "V")
+			if (strcmp(argv[i], "-v") == 0 || strcmp(argv[i], "-V") == 0)
 				verboseEnable = true;
 		}
 	}
@@ -34,39 +36,43 @@ void teste(const unsigned int n)
 	}
 }
 
-void log(const string & msg)
+void gatewayLog(const string & msg)
 {
 	if (verboseEnable)
-		cout << msg << endl;
+		cout << msg;
 }
 
 int main(int argc, char * argv[])
 {
-	log("Initializing COM.");
+	setupOptions(argc, argv);
+
+	gatewayLog("Initializing COM.\r\n");
 	OPCClient::Initialize();
 
 	try
 	{
 		//teste(3);
-		unique_ptr<OPCClient> opc = make_unique<OPCClient>(L"ECA.OPCDAServer211");
-		
-		OPCHANDLE item = opc->AddItem(L"TAG0", VARENUM::VT_I8);
+		unique_ptr<OPCClient> opc = make_unique<OPCClient>(L"ECA.OPCDAServer211", gatewayLog);
+
+		HRESULT hr = opc->AddItem(L"TAG0", VARENUM::VT_I8);
+
+		_ASSERT(!hr);
 
 		VARIANT result;
 		VariantInit(&result);
 
-		opc->ReadItem(item, result);
+		opc->ReadItem(L"TAG0", result);
 
 		long a = result.lVal;
 
-		log("Uninitializing COM.");
+		gatewayLog("Uninitializing COM.");
 		OPCClient::Uninitialize();
 	}
 	catch (exception & e)
 	{
-		log("An exception occurred: " + string(e.what()));
+		gatewayLog("An exception occurred: " + string(e.what()));
 
-		log("Uninitializing COM.");
+		gatewayLog("Uninitializing COM.\r\n");
 		OPCClient::Uninitialize();
 	}
 
