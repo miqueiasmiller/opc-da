@@ -15,6 +15,8 @@
 #include <unordered_map>
 #include <vector>
 #include "opcda.h"
+#include "opcerror.h"
+#include "opc_utils.h"
 
 using namespace std;
 
@@ -29,6 +31,7 @@ namespace opc
 	};
 
 	struct OPCCLIENT_API Item {
+		string id;
 		OPCHANDLE handle;
 		VARTYPE dataType;
 	};
@@ -37,7 +40,9 @@ namespace opc
 	private:
 		// since this class doesn't support accessPath, this method is private...
 		// adds an item to the group...
-		HRESULT AddItem(wstring const & accessPath, wstring const & itemId, VARENUM type);
+		HRESULT AddItem(string const & accessPath, string const & itemId, VARENUM type);
+
+		HRESULT OPCClient::RemoveItem(Item const & item);
 
 	protected:
 		// a pointer to the IUnknown interface...
@@ -50,29 +55,41 @@ namespace opc
 		unique_ptr<Group> group;
 
 		// the items collection. All added items will have its handle stored here...
-		unordered_map<wstring, Item> items;
+		unordered_map<string, Item> items;
 
 		// retrieves an IUnknown instance of opc-da server...
-		IOPCServer * GetOPCServer(wstring const & serverName);
+		IOPCServer * GetOPCServer(string const & serverName);
 
-		// creates a item management group...
+		// creates a group...
 		unique_ptr<Group> AddGroup(IOPCServer * opcServer, unsigned long updateRate);
+
+		// removes a group...
+		HRESULT RemoveGroup(IOPCServer * opcServer, Group const & group);
+
+		// removes all added items from the group...
+		HRESULT RemoveAllItems();
 
 	public:
 		// destructor...
 		~OPCClient();
 
 		// constructor...
-		OPCClient(wstring const & serverName, LogFunction logger);
+		OPCClient(string const & serverName, LogFunction logger);
 
 		// constructor...
-		OPCClient(wstring const & serverName);
+		OPCClient(string const & serverName);
 
 		// adds an item to the group...
-		HRESULT AddItem(wstring const & itemId, VARENUM type);
+		HRESULT AddItem(string const & itemId, VARENUM type);
+
+		// removes an item from the group...
+		HRESULT RemoveItem(string const & itemId);
 
 		// reads the value of an item...
-		HRESULT ReadItem(wstring const & itemId, VARIANT & output);
+		HRESULT Read(string const & itemId, VARIANT & value);
+
+		// writes the value of an item...
+		HRESULT Write(string const & itemId, VARIANT & value);
 
 		// initializes COM...
 		static void Initialize(void);

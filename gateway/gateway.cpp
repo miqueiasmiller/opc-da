@@ -24,18 +24,6 @@ void setupOptions(int argc, char * argv[])
 	}
 }
 
-void teste(const unsigned int n)
-{
-	//unique_ptr<OPCClient> opcClient (new OPCClient(L"Matrikon.OPC.Simulation.1"));
-	vector<unique_ptr<OPCClient>> v;
-
-	for (unsigned int i = 0; i < n; i++)
-	{
-		//v.push_back(unique_ptr<OPCClient>(new OPCClient(L"Matrikon.OPC.Simulation.1")));
-		v.push_back(unique_ptr<OPCClient>(new OPCClient(L"ECA.OPCDAServer211")));
-	}
-}
-
 void gatewayLog(const string & msg)
 {
 	if (verboseEnable)
@@ -51,19 +39,32 @@ int main(int argc, char * argv[])
 
 	try
 	{
-		//teste(3);
-		unique_ptr<OPCClient> opc = make_unique<OPCClient>(L"ECA.OPCDAServer211", gatewayLog);
+		{
+			//teste(3);
+			unique_ptr<OPCClient> opc = make_unique<OPCClient>("ECA.OPCDAServer211", gatewayLog);
 
-		HRESULT hr = opc->AddItem(L"TAG0", VARENUM::VT_I8);
+			VARIANT result;
+			HRESULT hr;
 
-		_ASSERT(!hr);
+			hr = opc->AddItem("TAG9", VARENUM::VT_I4);
 
-		VARIANT result;
-		VariantInit(&result);
+			hr = opc->AddItem("TAG0", VARENUM::VT_I8);
+			_ASSERT(!hr);
+			VariantInit(&result);
+			opc->Read("TAG0", result);
 
-		opc->ReadItem(L"TAG0", result);
+			hr = opc->Write("TAG9", result);
 
-		long a = result.lVal;
+			hr = opc->AddItem("TAG1", VARENUM::VT_I8);
+			_ASSERT(!hr);
+			VariantInit(&result);
+			opc->Read("TAG1", result);
+
+			hr = opc->Write("TAG9", result);
+			
+			hr = opc->RemoveItem("TAG0");
+			_ASSERT(!hr);
+		}
 
 		gatewayLog("Uninitializing COM.");
 		OPCClient::Uninitialize();
