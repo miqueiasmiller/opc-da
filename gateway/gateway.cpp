@@ -55,12 +55,16 @@ int main(int argc, char * argv[])
 
 			hr = opc->Write("TAG9", result);
 
+			VariantClear(&result);
+
 			hr = opc->AddItem("TAG1", VARENUM::VT_I8);
 			_ASSERT(!hr);
 			VariantInit(&result);
 			opc->Read("TAG1", result);
 
 			hr = opc->Write("TAG9", result);
+
+			VariantClear(&result);
 			
 			hr = opc->RemoveItem("TAG0");
 			_ASSERT(!hr);

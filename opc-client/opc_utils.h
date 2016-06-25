@@ -1,11 +1,44 @@
+#pragma once
+
+#ifdef OPCCLIENT_EXPORTS
+#define OPCCLIENT_API __declspec(dllexport)
+#else
+#define OPCCLIENT_API __declspec(dllimport)
+#endif
+
+#include <functional>
 #include <string>
+#include "opcda.h"
 
 using namespace std;
 
 namespace opc
 {
-	wchar_t * convertMBSToWCS(char const * value)
+	struct OPCCLIENT_API Group {
+		OPCHANDLE handle;
+		IOPCItemMgt * ptr;
+		unsigned long updateRate;
+	};
+
+	struct OPCCLIENT_API ItemValue
 	{
+		OPCHANDLE handle;
+		VARIANT value;
+		DWORD quality;
+	};
+
+	struct OPCCLIENT_API ItemInfo
+	{
+		string id;
+		OPCHANDLE handle;
+		VARTYPE dataType;
+	};
+
+	typedef function<void(string const &)> LogHandler;
+
+	typedef function<void(vector<unique_ptr<ItemValue>> const &)> DataChangeHandler;
+
+	static wchar_t * convertMBSToWCS(char const * value){
 		size_t newSize = strlen(value) + 1;
 		size_t convertedChars = 0;
 
@@ -14,12 +47,5 @@ namespace opc
 		mbstowcs_s(&convertedChars, converted, newSize, value, _TRUNCATE);
 
 		return converted;
-	}
-
-	wstring convertMBSToWCS(string const * value)
-	{
-		wchar_t * converted = convertMBSToWCS(value->c_str());
-
-		return wstring(converted);
-	}
+	};
 }

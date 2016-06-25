@@ -4,6 +4,12 @@ namespace opc
 {
 	OPCClient::~OPCClient()
 	{
+		UnsetDataCallback();
+
+		dwCookie = 0;
+
+		connPoint->Release();
+
 		// removes all added items...
 		RemoveAllItems();
 
@@ -22,7 +28,7 @@ namespace opc
 	}
 
 
-	OPCClient::OPCClient(string const & serverName) : opcServer(nullptr), logger([](string const &){})
+	OPCClient::OPCClient(string const & serverName) : opcServer(nullptr), logger([](string const &){}), dwCookie(0)
 	{
 		// gets an instance of the IOPCServer and assigns it to the instance variable...
 		opcServer = GetOPCServer(serverName);
@@ -32,7 +38,7 @@ namespace opc
 	}
 
 
-	OPCClient::OPCClient(string const & serverName, LogFunction logFunc) : opcServer(nullptr), logger(logFunc)
+	OPCClient::OPCClient(string const & serverName, LogHandler logFunc) : opcServer(nullptr), logger(logFunc), dwCookie(0)
 	{
 		// gets an instance of the IOPCServer and assigns it to the instance variable...
 		logger(">> Initializing OPCServer.\r\n");
@@ -111,16 +117,16 @@ namespace opc
 	}
 
 
-	HRESULT OPCClient::AddItem(string const & itemId, VARENUM type)
+	HRESULT OPCClient::AddItem(string const & itemId, VARENUM type, ItemInfo & addedItem)
 	{
-		return AddItem("", itemId, type);
+		return AddItem("", itemId, type, addedItem);
 	}
 
 
-	HRESULT OPCClient::AddItem(string const & accessPath, string const & itemId, VARENUM type)
+	HRESULT OPCClient::AddItem(string const & accessPath, string const & itemId, VARENUM type, ItemInfo & addedInfo)
 	{
 		// checks if an element with this key exists in the map...
-		if (items.count(itemId) == 1)
+		if (itemsById.count(itemId) == 1)
 		{
 			return S_OK;
 		}
@@ -153,8 +159,12 @@ namespace opc
 		// if succeeds, adds the item to the map
 		if (hr == S_OK)
 		{
+			// creates the item info...
+			addedInfo = ItemInfo{ itemId, result[0].hServer, result[0].vtCanonicalDataType };
+
 			// adds the item handle to the map...
-			items.emplace(itemId, Item{ itemId, result[0].hServer, result[0].vtCanonicalDataType });
+			itemsById.emplace(itemId, addedInfo);
+
 			msg << ">> Item " << itemId << " added to the group. Code: " << hr << endl;
 			//sprintf(msg, ">> Item %s added to the group. Code: %x\r\n", itemId, hr);
 			logger(msg.str());
@@ -179,17 +189,19 @@ namespace opc
 
 	HRESULT OPCClient::RemoveAllItems()
 	{
+		OPCHANDLE itemHandle;
 		HRESULT hr;
 
-		auto it = items.begin();
+		auto it = itemsById.begin();
 
-		while (it != items.end())
+		while (it != itemsById.end())
 		{
+			itemHandle = it->second.handle;
 			hr = RemoveItem(it->second);
 
 			if (hr == S_OK)
 			{
-				it = items.erase(it);
+				it = itemsById.erase(it);
 			}
 			else
 			{
@@ -197,48 +209,54 @@ namespace opc
 			}
 		}
 
-		return items.empty() ? S_OK : S_FALSE;
+		return itemsById.empty() ? S_OK : S_FALSE;
 	}
 
 
-	HRESULT OPCClient::RemoveItem(string const & itemId)
+	HRESULT OPCClient::RemoveItem(ItemInfo const & item)
 	{
+		HRESULT hr;
 		ostringstream msg;
 
 		// checks if the itemId is already in the map. I yes, returns OK...
-		if (items.count(itemId) == 0)
+		if (itemsById.count(item.id) == 0)
 		{
-			msg << ">> The item '" << itemId.c_str() << "' wasn't found in the added list." << endl;
+			msg << ">> The item '" << item.id.c_str() << "' wasn't found in the added list." << endl;
 			logger(msg.str());
 
 			return S_FALSE;
 		}
 
-		Item toRemove = items[itemId];
+		ItemInfo toRemove = itemsById[item.id];
 
-		if (RemoveItem(toRemove) == S_OK)
+		if (toRemove.handle != item.handle)
 		{
-			items.erase(itemId);
+			msg << ">> The item's handle [" << item.handle << "] does no match the handle in the internal dictionary." << endl;
+			logger(msg.str());
+
+			return S_FALSE;
 		}
 
-		msg << ">> The item '" << itemId << "' was removed from the group." << endl;
+		if (hr = RemoveItem(toRemove) == S_OK)
+		{
+			itemsById.erase(item.id);
+		}
+		else
+		{
+			msg << ">> !!! An error occurred while trying to remove the item '" << toRemove.id.c_str() << "'. Error code: " << hr << endl;
+			logger(msg.str());
+		}
+
+		msg << ">> The item '" << item.id << "' was removed from the group." << endl;
 		logger(msg.str());
 	}
 
 
-	HRESULT OPCClient::RemoveItem(Item const & item)
+	HRESULT OPCClient::RemoveItem(OPCHANDLE const & handle)
 	{
 		HRESULT * errors;
 
-		HRESULT hr = group->ptr->RemoveItems(1, const_cast<OPCHANDLE *>(&item.handle), &errors);
-
-		if (hr != S_OK)
-		{
-			ostringstream msg;
-
-			msg << ">> !!! An error occurred while trying to remove the item '" << item.id << "'. Error code: " << hr << endl;
-			logger(msg.str());
-		}
+		HRESULT hr = group->ptr->RemoveItems(1, const_cast<OPCHANDLE *>(&handle), &errors);
 
 		//release memory allocated by the server...
 		CoTaskMemFree(errors);
@@ -248,21 +266,29 @@ namespace opc
 	}
 
 
-	HRESULT OPCClient::Read(string const & itemId, VARIANT & value)
+	HRESULT OPCClient::Read(ItemInfo const & item, ItemValue & value)
 	{
 		ostringstream msg;
 
 		// checks if the itemId is already in the map. I yes, returns OK...
-		if (items.count(itemId) == 0)
+		if (itemsById.count(item.id) == 0)
 		{
-			msg << ">> The item '" << itemId.c_str() << "' wasn't found in the added list." << endl;
+			msg << ">> The item '" << item.id.c_str() << "' wasn't found in the added list." << endl;
 			logger(msg.str());
 
 			return S_FALSE;
 		}
 
-		// gets the item's handle from the map...
-		OPCHANDLE item = items[itemId].handle;
+		// gets the item in the internal dictionary...
+		ItemInfo toRead = itemsById[item.id];
+
+		if (toRead.handle != item.handle)
+		{
+			msg << ">> The item's handle [" << item.handle << "] doesn't match the handle of the item in the internal dictionary." << endl;
+			logger(msg.str());
+
+			return S_FALSE;
+		}
 
 		// value of the item:
 		OPCITEMSTATE * readValue = nullptr;
@@ -275,17 +301,17 @@ namespace opc
 
 		group->ptr->QueryInterface(__uuidof(syncIO), (void**)&syncIO);
 
-		HRESULT hr = syncIO->Read(OPC_DS_DEVICE, 1, const_cast<OPCHANDLE*>(&item), &readValue, &errors);
+		HRESULT hr = syncIO->Read(OPC_DS_DEVICE, 1, const_cast<OPCHANDLE*>(&toRead.handle), &readValue, &errors);
 
 		if (hr != S_OK || readValue == nullptr)
 		{
-			msg << ">> !! An error occurred while trying to read the item '" << itemId.c_str() << "'. Error code: " << hr << endl;
+			msg << ">> !! An error occurred while trying to read the item '" << item.id.c_str() << "'. Error code: " << hr << endl;
 			logger(msg.str());
 
 			return hr;
 		}
 
-		value = readValue[0].vDataValue;
+		value = ItemValue{ readValue[0].hClient, readValue[0].vDataValue, readValue[0].wQuality };
 
 		//Release memeory allocated by the OPC server:
 		CoTaskMemFree(errors);
@@ -302,21 +328,28 @@ namespace opc
 	}
 
 
-	HRESULT OPCClient::Write(string const & itemId, VARIANT & value)
+	HRESULT OPCClient::Write(ItemInfo const & item, VARIANT & value)
 	{
 		ostringstream msg;
 
 		// checks if the itemId is already in the map. I yes, returns OK...
-		if (items.count(itemId) == 0)
+		if (itemsById.count(item.id) == 0)
 		{
-			msg << ">> The item '" << itemId.c_str() << "' wasn't found in the added list." << endl;
+			msg << ">> The item '" << item.id.c_str() << "' wasn't found in the added list." << endl;
 			logger(msg.str());
 
 			return S_FALSE;
 		}
 
-		// gets the item's handle from the map...
-		OPCHANDLE item = items[itemId].handle;
+		ItemInfo toWrite = itemsById[item.id];
+
+		if (toWrite.handle != item.handle)
+		{
+			msg << ">> The item's handle [" << item.handle << "] doesn't match the handle of the item in the internal dictionary." << endl;
+			logger(msg.str());
+
+			return S_FALSE;
+		}
 
 		// to store error code(s)
 		HRESULT * errors = nullptr;
@@ -326,11 +359,11 @@ namespace opc
 
 		group->ptr->QueryInterface(__uuidof(syncIO), (void**)&syncIO);
 
-		HRESULT hr = syncIO->Write(1, const_cast<OPCHANDLE *>(&item), &value, &errors);
+		HRESULT hr = syncIO->Write(1, const_cast<OPCHANDLE *>(&toWrite.handle), &value, &errors);
 
 		if (hr != S_OK || &value == nullptr)
 		{
-			msg << ">> !! An error occurred while trying to write to the item '" << itemId.c_str() << "'. Error code: " << hr << endl;
+			msg << ">> !! An error occurred while trying to write to the item '" << toWrite.id.c_str() << "'. Error code: " << hr << endl;
 			logger(msg.str());
 
 			return hr;
@@ -348,10 +381,93 @@ namespace opc
 	}
 
 
+	void OPCClient::OnDataChanged(vector<unique_ptr<ItemValue>> const & changedItems)
+	{
+		ostringstream msg;
+
+		msg << "GOT IT!!! Callback called. Items changed: " << changedItems.size() << endl;
+		logger(msg.str());
+	}
+
+
+	HRESULT OPCClient::SetDataCallback()
+	{
+		ostringstream msg;
+		HRESULT hr;
+
+		IConnectionPointContainer * cpc = nullptr;
+
+		//Get a pointer to the IConnectionPointContainer interface:
+		hr = group->ptr->QueryInterface(__uuidof(cpc), (void**)&cpc);
+		if (hr != S_OK)
+		{
+			msg << ">> !!! Could not obtain a pointer to IConnectionPointContainer. Error: " << hr << endl;
+			logger(msg.str());
+
+			return hr;
+		}
+
+
+		// Call the IConnectionPointContainer::FindConnectionPoint method on the
+		// group object to obtain a Connection Point
+		IConnectionPoint * cp = connPoint.get();
+		hr = cpc->FindConnectionPoint(IID_IOPCDataCallback, &cp);
+		if (hr != S_OK)
+		{
+			msg << "Failed call to FindConnectionPoint. Error: " << hr << endl;
+			logger(msg.str());
+
+			return hr;
+		}
+
+
+		// Now set up the Connection Point.
+		dataCallback = make_unique<OPCDataCallback>(logger, bind(&OPCClient::OnDataChanged, this, placeholders::_1));
+		hr = connPoint->Advise(dataCallback.get(), &dwCookie);
+		if (hr != S_OK)
+		{
+			msg << "Failed call to IConnectionPoint::Advise.Error: " << hr << endl;
+			logger(msg.str());
+
+			return hr;
+		}
+
+
+		// From this point on we do not need anymore the pointer to the
+		// IConnectionPointContainer interface, so release it
+		cpc->Release();
+		cpc = nullptr;
+	}
+
+
+	HRESULT OPCClient::UnsetDataCallback()
+	{
+		HRESULT hr;
+		ostringstream msg;
+
+		//call the IDataObject::DUnAdvise server method for cancelling the callback
+		hr = connPoint->Unadvise(dwCookie);
+		if (hr != S_OK)
+		{
+			msg << ">> !!! Failed call to IDataObject::UnAdvise. Error: " << hr << endl;
+			logger(msg.str());
+
+			//dwCookie = 0;
+		}
+
+		return hr;
+	}
+
+
 	void OPCClient::Initialize(void)
 	{
 		// Initializes Microsoft COM library...
-		CoInitialize(NULL);
+
+		// Forces STA (single thread apartment)
+		//CoInitialize(NULL);
+
+		// Forces MTA (multi thread apartment)
+		CoInitializeEx(NULL, COINIT_MULTITHREADED);
 	}
 
 
