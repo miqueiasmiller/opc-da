@@ -31,7 +31,7 @@ namespace opc
 	{
 		string id;
 		OPCHANDLE handle;
-		VARTYPE dataType;
+		VARENUM dataType;
 	};
 
 	typedef function<void(string const &)> LogHandler;

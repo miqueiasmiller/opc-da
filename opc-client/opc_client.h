@@ -44,6 +44,9 @@ namespace opc
 		// dwCookie...
 		DWORD dwCookie;
 
+		// controls if the OPC client is connected to the OPC server...
+		bool connected;
+
 		// data callback class...
 		unique_ptr<OPCDataCallback> dataCallback;
 
@@ -63,7 +66,7 @@ namespace opc
 		HRESULT RemoveAllItems();
 
 		// removes an item...
-		HRESULT OPCClient::RemoveItem(OPCHANDLE const & handle);
+		HRESULT OPCClient::InternalRemoveItem(OPCHANDLE const & handle);
 
 		// this functions is called every time when one or more items's values are changed... 
 		void OPCClient::OnDataChanged(vector<unique_ptr<ItemValue>> const & changedItems);
@@ -73,16 +76,25 @@ namespace opc
 		~OPCClient();
 
 		// constructor...
-		OPCClient(string const & serverName, LogHandler logger);
+		OPCClient(LogHandler logger);
 
 		// constructor...
-		OPCClient(string const & serverName);
+		OPCClient();
+
+		// connects to an OPCServer...
+		void Connect(string const & serverName);
+
+		// disconnects from the OPCServer...
+		void Disconnect();
 
 		// adds an item to the group...
 		HRESULT AddItem(string const & itemId, VARENUM type, ItemInfo & addedItem);
 
 		// removes an item from the group...
 		HRESULT RemoveItem(ItemInfo const & item);
+
+		// gets the item info...
+		HRESULT GetItemInfo(string const & itemId, ItemInfo & addedInfo);
 
 		// reads the value of an item...
 		HRESULT Read(ItemInfo const & item, ItemValue & value);
@@ -95,6 +107,9 @@ namespace opc
 
 		// stops monitoring data changes...
 		HRESULT OPCClient::UnsetDataCallback();
+
+		// sets the group activated...
+		HRESULT OPCClient::SetGroupState(bool active);
 
 		// initializes COM...
 		static void Initialize(void);

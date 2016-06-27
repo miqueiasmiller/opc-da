@@ -4,42 +4,25 @@ namespace opc
 {
 	OPCClient::~OPCClient()
 	{
-		UnsetDataCallback();
-
-		dwCookie = 0;
-
-		connPoint->Release();
-
-		// removes all added items...
-		RemoveAllItems();
-
-		// releases the Item Management Group and tries to remove the group...
-		if (group.get())
-		{
-			group->ptr->Release();
-			RemoveGroup(opcServer, *group.get());
-		}
-
-		// releases the OPC Server...
-		if (opcServer)
-		{
-			opcServer->Release();
-		}
+		Disconnect();
 	}
 
 
-	OPCClient::OPCClient(string const & serverName) : opcServer(nullptr), logger([](string const &){}), dwCookie(0)
+	OPCClient::OPCClient() : opcServer(nullptr), logger([](string const &){}), dwCookie(0), connected(false)
 	{
-		// gets an instance of the IOPCServer and assigns it to the instance variable...
-		opcServer = GetOPCServer(serverName);
-
-		// gets an instance of the item management group...
-		group = AddGroup(opcServer, 1000);
 	}
 
 
-	OPCClient::OPCClient(string const & serverName, LogHandler logFunc) : opcServer(nullptr), logger(logFunc), dwCookie(0)
+	OPCClient::OPCClient(LogHandler logFunc) : opcServer(nullptr), logger(logFunc), dwCookie(0), connected(false)
 	{
+	}
+
+
+	void OPCClient::Connect(string const & serverName)
+	{
+		if (connected)
+			return;
+
 		// gets an instance of the IOPCServer and assigns it to the instance variable...
 		logger(">> Initializing OPCServer.\r\n");
 		opcServer = GetOPCServer(serverName);
@@ -47,6 +30,47 @@ namespace opc
 		// gets an instance of the item management group...
 		logger(">> Adding the Item Management Group to the server.\r\n");
 		group = AddGroup(opcServer, 1000);
+
+		connected = true;
+	}
+
+
+	void OPCClient::Disconnect()
+	{
+		if (!connected)
+			return;
+
+		UnsetDataCallback();
+
+		dwCookie = 0;
+
+		// releases the connection pointer...
+		if (connPoint)
+			connPoint->Release();
+
+		// releases the data callback object...
+		if (dataCallback)
+			dataCallback->Release();
+
+		//TODO - Verificar a contagem de referencias do dataCallback
+
+		// removes all added items...
+		RemoveAllItems();
+
+		// releases the Item Management Group and tries to remove the group...
+		if (group)
+		{
+			group->ptr->Release();
+			RemoveGroup(opcServer, *group);
+		}
+
+		// releases the OPC Server...
+		if (opcServer)
+		{
+			opcServer->Release();
+		}
+
+		connected = false;
 	}
 
 
@@ -160,12 +184,14 @@ namespace opc
 		if (hr == S_OK)
 		{
 			// creates the item info...
-			addedInfo = ItemInfo{ itemId, result[0].hServer, result[0].vtCanonicalDataType };
+			addedInfo.id = itemId;
+			addedInfo.handle = result[0].hServer;
+			addedInfo.dataType = (VARENUM)result[0].vtCanonicalDataType;
 
 			// adds the item handle to the map...
 			itemsById.emplace(itemId, addedInfo);
 
-			msg << ">> Item " << itemId << " added to the group. Code: " << hr << endl;
+			msg << ">> Item " << itemId << " added to the group. Handler: " << addedInfo.handle << endl;
 			//sprintf(msg, ">> Item %s added to the group. Code: %x\r\n", itemId, hr);
 			logger(msg.str());
 		}
@@ -187,26 +213,46 @@ namespace opc
 	}
 
 
+	HRESULT OPCClient::GetItemInfo(string const & itemId, ItemInfo & addedInfo)
+	{
+		if (itemsById.count(itemId) == 1)
+		{
+			addedInfo = itemsById[itemId];
+			return S_OK;
+		}
+
+		return S_FALSE;
+	}
+
+
 	HRESULT OPCClient::RemoveAllItems()
 	{
-		OPCHANDLE itemHandle;
 		HRESULT hr;
+		ostringstream msg;
 
 		auto it = itemsById.begin();
 
-		while (it != itemsById.end())
+		for (auto it = itemsById.begin(); it != itemsById.end();)
 		{
-			itemHandle = it->second.handle;
-			hr = RemoveItem(it->second);
+			hr = InternalRemoveItem(it->second.handle);
 
 			if (hr == S_OK)
 			{
+				msg << ">> Item '" << it->second.id << "' was removed from the group. Handle: " << it->second.handle << endl;
+				logger(msg.str());
+
 				it = itemsById.erase(it);
 			}
 			else
 			{
+				msg << ">> !!! An error occurred while trying to remove the item '" << it->second.id << "'. Error code: " << hr << endl;
+				logger(msg.str());
+
 				++it;
 			}
+
+			msg.clear();
+			msg.str("");
 		}
 
 		return itemsById.empty() ? S_OK : S_FALSE;
@@ -221,7 +267,7 @@ namespace opc
 		// checks if the itemId is already in the map. I yes, returns OK...
 		if (itemsById.count(item.id) == 0)
 		{
-			msg << ">> The item '" << item.id.c_str() << "' wasn't found in the added list." << endl;
+			msg << ">> The item '" << item.id << "' wasn't found in the added list." << endl;
 			logger(msg.str());
 
 			return S_FALSE;
@@ -237,22 +283,22 @@ namespace opc
 			return S_FALSE;
 		}
 
-		if (hr = RemoveItem(toRemove) == S_OK)
+		if (hr = InternalRemoveItem(toRemove.handle) == S_OK)
 		{
 			itemsById.erase(item.id);
 		}
 		else
 		{
-			msg << ">> !!! An error occurred while trying to remove the item '" << toRemove.id.c_str() << "'. Error code: " << hr << endl;
+			msg << ">> !!! An error occurred while trying to remove the item '" << toRemove.id << "'. Error code: " << hr << endl;
 			logger(msg.str());
 		}
 
-		msg << ">> The item '" << item.id << "' was removed from the group." << endl;
+		msg << ">> Item '" << toRemove.id << "' was removed from the group. Handle: " << toRemove.handle << endl;
 		logger(msg.str());
 	}
 
 
-	HRESULT OPCClient::RemoveItem(OPCHANDLE const & handle)
+	HRESULT OPCClient::InternalRemoveItem(OPCHANDLE const & handle)
 	{
 		HRESULT * errors;
 
@@ -273,7 +319,7 @@ namespace opc
 		// checks if the itemId is already in the map. I yes, returns OK...
 		if (itemsById.count(item.id) == 0)
 		{
-			msg << ">> The item '" << item.id.c_str() << "' wasn't found in the added list." << endl;
+			msg << ">> The item '" << item.id << "' wasn't found in the added list." << endl;
 			logger(msg.str());
 
 			return S_FALSE;
@@ -305,13 +351,15 @@ namespace opc
 
 		if (hr != S_OK || readValue == nullptr)
 		{
-			msg << ">> !! An error occurred while trying to read the item '" << item.id.c_str() << "'. Error code: " << hr << endl;
+			msg << ">> !! An error occurred while trying to read the item '" << item.id << "'. Error code: " << hr << endl;
 			logger(msg.str());
 
 			return hr;
 		}
 
-		value = ItemValue{ readValue[0].hClient, readValue[0].vDataValue, readValue[0].wQuality };
+		value.handle = readValue[0].hClient;
+		value.value = readValue[0].vDataValue;
+		value.quality = readValue[0].wQuality;
 
 		//Release memeory allocated by the OPC server:
 		CoTaskMemFree(errors);
@@ -335,7 +383,7 @@ namespace opc
 		// checks if the itemId is already in the map. I yes, returns OK...
 		if (itemsById.count(item.id) == 0)
 		{
-			msg << ">> The item '" << item.id.c_str() << "' wasn't found in the added list." << endl;
+			msg << ">> The item '" << item.id << "' wasn't found in the added list." << endl;
 			logger(msg.str());
 
 			return S_FALSE;
@@ -363,7 +411,7 @@ namespace opc
 
 		if (hr != S_OK || &value == nullptr)
 		{
-			msg << ">> !! An error occurred while trying to write to the item '" << toWrite.id.c_str() << "'. Error code: " << hr << endl;
+			msg << ">> !! An error occurred while trying to write to the item '" << toWrite.id << "'. Error code: " << hr << endl;
 			logger(msg.str());
 
 			return hr;
@@ -414,7 +462,7 @@ namespace opc
 		hr = cpc->FindConnectionPoint(IID_IOPCDataCallback, &cp);
 		if (hr != S_OK)
 		{
-			msg << "Failed call to FindConnectionPoint. Error: " << hr << endl;
+			msg << ">> !!! Failed call to FindConnectionPoint. Error: " << hr << endl;
 			logger(msg.str());
 
 			return hr;
@@ -423,10 +471,11 @@ namespace opc
 
 		// Now set up the Connection Point.
 		dataCallback = make_unique<OPCDataCallback>(logger, bind(&OPCClient::OnDataChanged, this, placeholders::_1));
+		dataCallback->AddRef();
 		hr = connPoint->Advise(dataCallback.get(), &dwCookie);
 		if (hr != S_OK)
 		{
-			msg << "Failed call to IConnectionPoint::Advise.Error: " << hr << endl;
+			msg << ">> !!! Failed call to IConnectionPoint::Advise.Error: " << hr << endl;
 			logger(msg.str());
 
 			return hr;
@@ -442,18 +491,65 @@ namespace opc
 
 	HRESULT OPCClient::UnsetDataCallback()
 	{
+		if (connPoint)
+		{
+			HRESULT hr;
+			ostringstream msg;
+
+			//call the IDataObject::DUnAdvise server method for cancelling the callback
+			hr = connPoint->Unadvise(dwCookie);
+			if (hr != S_OK)
+			{
+				msg << ">> !!! Failed call to IDataObject::UnAdvise. Error: " << hr << endl;
+				logger(msg.str());
+
+				//dwCookie = 0;
+			}
+
+			return hr;
+		}
+
+		return S_OK;
+	}
+
+
+	HRESULT OPCClient::SetGroupState(bool active)
+	{
 		HRESULT hr;
 		ostringstream msg;
+		IOPCGroupStateMgt * groupStateMgr;
+		DWORD revisedUpdateRate;
+		BOOL activeFlag = active;
 
-		//call the IDataObject::DUnAdvise server method for cancelling the callback
-		hr = connPoint->Unadvise(dwCookie);
+		// Get a pointer to the IOPCGroupStateMgt interface:
+		hr = group->ptr->QueryInterface(__uuidof(groupStateMgr), (void**)&groupStateMgr);
 		if (hr != S_OK)
 		{
-			msg << ">> !!! Failed call to IDataObject::UnAdvise. Error: " << hr << endl;
+			msg << ">> !!! Could not obtain a pointer to IOPCGroupStateMgt. Error: " << hr << endl;
 			logger(msg.str());
-
-			//dwCookie = 0;
+			return hr;
 		}
+
+		// Set the state to Active. Since the other group properties are to remain
+		// unchanged we pass NULL pointers to them as suggested by the OPC DA Spec.
+		hr = groupStateMgr->SetState(
+			NULL,                // *pRequestedUpdateRate
+			&revisedUpdateRate,  // *pRevisedUpdateRate - can't be NULL
+			&activeFlag,		     // *pActive
+			NULL,				         // *pTimeBias
+			NULL,				         // *pPercentDeadband
+			NULL,				         // *pLCID
+			NULL);				       // *phClientGroup
+
+		if (hr != S_OK)
+		{
+			msg << ">> !!! Failed call to IOPCGroupMgt::SetState. Error: " << hr << endl;
+			logger(msg.str());
+		}
+
+		// Free the pointer since we will not use it anymore.
+		groupStateMgr->Release();
+		groupStateMgr = nullptr;
 
 		return hr;
 	}

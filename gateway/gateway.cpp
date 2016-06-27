@@ -30,6 +30,135 @@ void gatewayLog(const string & msg)
 		cout << msg;
 }
 
+
+void connectCommand(OPCClient & opc)
+{
+	string serverName;
+
+	cout << "Enter the OPC Server name: ";
+	cin >> serverName;
+
+	opc.Connect(serverName);
+}
+
+
+void disconnectCommand(OPCClient & opc)
+{
+	string response;
+
+	cout << "Enter (y) if you really wants to disconnect. ";
+	cin >> response;
+
+	if (response == "y")
+		opc.Disconnect();
+}
+
+
+void addServer211Items(OPCClient & opc)
+{
+	ItemInfo info;
+	string id;
+
+	for (size_t i = 0; i < 10; i++)
+	{
+		id = "TAG" + to_string(i);
+		opc.AddItem(id, VARENUM::VT_I4, info);
+	}
+}
+
+
+void readItem(OPCClient & opc, vector<string> const & tokens)
+{
+	if (tokens.size() < 2)
+	{
+		cout << "Invalid write command." << endl;
+		return;
+	}
+
+	ItemInfo item;
+	string id = tokens[1];
+
+	HRESULT hr = opc.GetItemInfo(id, item);
+
+	if (hr == S_OK)
+	{
+		ItemValue value;
+		VariantInit(&value.value);
+
+		hr = opc.Read(item, value);
+
+		if (hr == S_OK)
+		{
+			cout << "Fazer o parser do valor lido." << endl;
+		}
+	}
+}
+
+
+HRESULT writeItem(OPCClient & opc, vector<string> const & tokens)
+{
+	if (tokens.size() < 3)
+	{
+		cout << "Invalid write command." << endl;
+		return S_FALSE;
+	}
+
+	string itemId = tokens[1];
+	string value = tokens[2];
+	ItemInfo item;
+
+	HRESULT hr = opc.GetItemInfo(itemId, item);
+
+	if (hr == S_OK)
+	{
+		VARIANT v;
+		v.intVal = stoi(value);
+
+		hr = opc.Write(item, v);
+	}
+}
+
+
+void openSocket(OPCClient const & opc, vector<string> const & tokens)
+{
+	int maxThreads = 1;
+
+	if (tokens.size() == 2)
+		maxThreads = stoi(tokens[1]);
+}
+
+
+void commandLoop(OPCClient & opc)
+{
+	string cmd;
+	vector<string> tokens;
+	do
+	{
+		cout << "Enter a command: ";
+		cin >> cmd;
+
+		istringstream iss(cmd);
+		copy(istream_iterator<string>(iss), istream_iterator<string>(), back_inserter(tokens));
+
+		if (tokens[0] == "connect")
+			connectCommand(opc);
+		else if (tokens[0] == "disconnect")
+			disconnectCommand(opc);
+		else if (tokens[0] == "add_211")
+			addServer211Items(opc);
+		else if (tokens[0] == "read")
+			readItem(opc, tokens);
+		else if (tokens[0] == "write")
+			writeItem(opc, tokens);
+		else if (tokens[0] == "open_socket")
+			openSocket(opc, tokens);
+
+
+		tokens.clear();
+	} while (cmd != "quit");
+}
+
+
 int main(int argc, char * argv[])
 {
 	setupOptions(argc, argv);
@@ -39,9 +168,21 @@ int main(int argc, char * argv[])
 
 	try
 	{
-		{
+		unique_ptr<OPCClient> opc = make_unique<OPCClient>(gatewayLog);
+
+		// criar ponto de conexão TCP e disparar uma nova thread a cada conexão
+
+		commandLoop(*opc);
+
+		// desconectar todos os clientes TCP
+
+		// matar as threads filhas
+
+		// finalizar
+
+		/*{
 			//teste(3);
-			unique_ptr<OPCClient> opc = make_unique<OPCClient>("ECA.OPCDAServer211", gatewayLog);
+
 
 			VARIANT result;
 			HRESULT hr;
@@ -65,10 +206,10 @@ int main(int argc, char * argv[])
 			hr = opc->Write("TAG9", result);
 
 			VariantClear(&result);
-			
+
 			hr = opc->RemoveItem("TAG0");
 			_ASSERT(!hr);
-		}
+			}*/
 
 		gatewayLog("Uninitializing COM.");
 		OPCClient::Uninitialize();
