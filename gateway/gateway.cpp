@@ -1,3 +1,5 @@
+#include <boost/thread.hpp>
+#include "proxy-server.h"
 #include <functional>
 #include <iostream>
 #include <memory>
@@ -71,7 +73,7 @@ void addServer211Items(OPCClient & opc)
 }
 
 
-VARIANT readItem(OPCClient & opc, string itemId)
+VARIANT readItem(OPCClient & opc, string & const itemId)
 {
   ItemInfo item;
 
@@ -109,8 +111,19 @@ void readItem(OPCClient & opc, vector<string> const & tokens)
   cout << result << endl;
 }
 
+boost::mutex readMtx;
+string readItemProxyFn(OPCClient & opc, string const & itemId)
+{
+  boost::unique_lock<boost::mutex> lock(readMtx);
 
-HRESULT writeItem(OPCClient & opc, string itemId, VARIANT & value)
+  string a;
+  VARIANT v = readItem(opc, a); // readItem(opc, itemId);
+
+  return fromVARIANT(v);
+}
+
+
+HRESULT writeItem(OPCClient & opc, string const & itemId, VARIANT & value)
 {
   ItemInfo item;
 
@@ -148,6 +161,21 @@ HRESULT writeItem(OPCClient & opc, vector<string> const & tokens)
     cout << "Success" << endl;
   else
     cout << "Fail (" << hr << ")" << endl;
+}
+
+
+boost::mutex writeMtx;
+bool writeItemProxyFn(OPCClient & opc, string const & itemId, string value)
+{
+  boost::unique_lock<boost::mutex> lock(writeMtx);
+
+  VARIANT v;
+  VariantInit(&v);
+  toVariant(value, v);
+
+  HRESULT hr = writeItem(opc, itemId, v);
+
+  return hr == S_OK;
 }
 
 
@@ -241,6 +269,16 @@ void dataChangeCallback(vector<unique_ptr<ItemValue>> const & data)
   }
 }
 
+
+void initProxyAsync(function<string(string const & itemId)> readFn, function<bool(string const & itemId, string value)> writeFn)
+{
+  ProxyServer proxy(9002, readFn, writeFn);
+  proxy.start();
+}
+
+
+//function<string(string const & itemId)> readFnHandler;
+
 int main(int argc, char * argv[])
 {
   setupOptions(argc, argv);
@@ -253,7 +291,15 @@ int main(int argc, char * argv[])
     {
       unique_ptr<OPCClient> opc = make_unique<OPCClient>(gatewayLog, dataChangeCallback);
 
+      function<string(string const & itemId)> readFnHandler = [&](string const & itemId) -> string { return readItemProxyFn(*opc, itemId); };
+
+      function<bool(string const & itemId, string value)> writeFnHandler = [&](string const & itemId, string value) -> bool { return writeItemProxyFn(*opc, itemId, value); };
+
+      boost::thread proxyThread(&initProxyAsync, readFnHandler, writeFnHandler);
+
       commandLoop(*opc);
+
+      proxyThread.join();
     }
 
     gatewayLog("Uninitializing COM.\r\n");
