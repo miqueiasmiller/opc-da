@@ -27,6 +27,12 @@
     <ClInclude Include="opc_client.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="opc_utils.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="opc_data_callback.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="dllmain.cpp">
@@ -36,6 +42,9 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="opc_client.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="opc_data_callback.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
