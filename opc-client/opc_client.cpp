@@ -53,14 +53,12 @@ namespace opc
     dwCookie = 0;
 
     // releases the connection pointer...
-    if (connPoint)
+    if (connPoint != nullptr)
       connPoint->Release();
 
     // releases the data callback object...
-    if (dataCallback)
+    if (dataCallback != nullptr)
       dataCallback->Release();
-    /*if (dataCallback != nullptr)
-      dataCallback.Release();*/
 
     // removes all added items...
     RemoveAllItems();
@@ -253,7 +251,7 @@ namespace opc
         msg << ">> Item '" << it->second.id << "' was removed from the group. Handle: " << it->second.handle << endl;
         logger(msg.str());
 
-        auto v = find_if(itemsVector.begin(), itemsVector.end(), [&](ItemInfo const & inf) { 
+        auto v = find_if(itemsVector.begin(), itemsVector.end(), [&](ItemInfo const & inf) {
           return inf.handle == it->second.handle && inf.id == it->second.id;
         });
 
@@ -475,8 +473,7 @@ namespace opc
 
     // Call the IConnectionPointContainer::FindConnectionPoint method on the
     // group object to obtain a Connection Point
-    IConnectionPoint * cp = nullptr;
-    hr = cpc->FindConnectionPoint(IID_IOPCDataCallback, &cp);
+    hr = cpc->FindConnectionPoint(IID_IOPCDataCallback, &connPoint);
     if (hr != S_OK)
     {
       msg << ">> !!! Failed call to FindConnectionPoint. Error: " << hr << endl;
@@ -485,14 +482,10 @@ namespace opc
       return hr;
     }
 
-    connPoint.reset(cp);
-
     // Now set up the Connection Point.
-    dataCallback = make_unique<OPCDataCallback>(logger, dataChangeFunc, bind(&OPCClient::GetItemInfoByIndex, this, placeholders::_1));
+    dataCallback = new OPCDataCallback(logger, dataChangeFunc, bind(&OPCClient::GetItemInfoByIndex, this, placeholders::_1));
     dataCallback->AddRef();
-    /*dataCallback = new OPCDataCallback(logger, dataChangeFunc, bind(&OPCClient::GetItemInfoByIndex, this, placeholders::_1));
-    dataCallback.AddRef();*/
-    hr = connPoint->Advise(dataCallback.get(), &dwCookie);
+    hr = connPoint->Advise(dataCallback, &dwCookie);
     if (hr != S_OK)
     {
       msg << ">> !!! Failed call to IConnectionPoint::Advise.Error: " << hr << endl;
@@ -511,7 +504,7 @@ namespace opc
 
   HRESULT OPCClient::UnsetDataCallback()
   {
-    if (connPoint)
+    if (connPoint != nullptr)
     {
       HRESULT hr;
       ostringstream msg;

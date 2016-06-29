@@ -46,7 +46,7 @@ namespace opc
     vector<ItemInfo> itemsVector;
 
     // connection poiter used when monitoring changes on the items...
-    unique_ptr<IConnectionPoint> connPoint;
+    IConnectionPoint * connPoint = nullptr;
 
     // dwCookie...
     DWORD dwCookie;
@@ -55,8 +55,7 @@ namespace opc
     bool connected;
 
     // data callback class...
-    unique_ptr<OPCDataCallback> dataCallback;
-    //OPCDataCallback dataCallback;
+    OPCDataCallback * dataCallback = nullptr;
 
     // retrieves an IUnknown instance of opc-da server...
     IOPCServer * GetOPCServer(string const & serverName);

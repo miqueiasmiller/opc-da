@@ -138,8 +138,9 @@ HRESULT writeItem(OPCClient & opc, vector<string> const & tokens)
 
   VARIANT v;
   VariantInit(&v);
-  v.vt = VT_I4;
-  v.intVal = stoi(value);
+  //v.vt = VT_I4;
+  //v.intVal = stoi(value);
+  toVariant(value, v);
 
   HRESULT hr = writeItem(opc, itemId, v);
 
@@ -249,51 +250,13 @@ int main(int argc, char * argv[])
 
   try
   {
-    unique_ptr<OPCClient> opc = make_unique<OPCClient>(gatewayLog, dataChangeCallback);
-    //unique_ptr<OPCClient> opc = make_unique<OPCClient>(gatewayLog);
+    {
+      unique_ptr<OPCClient> opc = make_unique<OPCClient>(gatewayLog, dataChangeCallback);
 
-    // criar ponto de conexão TCP e disparar uma nova thread a cada conexão
+      commandLoop(*opc);
+    }
 
-    commandLoop(*opc);
-
-    // desconectar todos os clientes TCP
-
-    // matar as threads filhas
-
-    // finalizar
-
-    /*{
-      //teste(3);
-
-
-      VARIANT result;
-      HRESULT hr;
-
-      hr = opc->AddItem("TAG9", VARENUM::VT_I4);
-
-      hr = opc->AddItem("TAG0", VARENUM::VT_I8);
-      _ASSERT(!hr);
-      VariantInit(&result);
-      opc->Read("TAG0", result);
-
-      hr = opc->Write("TAG9", result);
-
-      VariantClear(&result);
-
-      hr = opc->AddItem("TAG1", VARENUM::VT_I8);
-      _ASSERT(!hr);
-      VariantInit(&result);
-      opc->Read("TAG1", result);
-
-      hr = opc->Write("TAG9", result);
-
-      VariantClear(&result);
-
-      hr = opc->RemoveItem("TAG0");
-      _ASSERT(!hr);
-      }*/
-
-    gatewayLog("Uninitializing COM.");
+    gatewayLog("Uninitializing COM.\r\n");
     OPCClient::Uninitialize();
   }
   catch (exception & e)

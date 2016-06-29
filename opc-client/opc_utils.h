@@ -69,10 +69,17 @@ namespace opc
     return converted;
   };
 
-  
+
   static string fromVARIANT(VARIANT & vr)
   {
     _bstr_t bt(vr);
     return string(static_cast<char *>(bt));
+  }
+
+
+  static void toVariant(string input, VARIANT & output)
+  {
+    _bstr_t bt(input.c_str());
+    reinterpret_cast<_variant_t &>(output) = bt;
   }
 }
