@@ -12,9 +12,13 @@ namespace opc
 {
   mutex OPCDataCallback::onDataChangeMtx;
 
+  DWORD OPCDataCallback::getCountRef()
+  {
+    return refCounter;
+  }
 
-  OPCDataCallback::OPCDataCallback(LogHandler logFunc, DataChangeHandler onDataChange) :
-    logger(logFunc), refCounter(0), changeHandler(onDataChange)
+  OPCDataCallback::OPCDataCallback(LogHandler logFunc, DataChangeHandler onDataChange, GetItemInfoHandler itemInfoHandler) :
+    logger(logFunc), refCounter(0), changeHandler(onDataChange), getItemInfo(itemInfoHandler)
   {
   }
 
@@ -112,15 +116,15 @@ namespace opc
       return E_INVALIDARG;
     }
 
+    ItemInfo info;
     for (DWORD dwItem = 0; dwItem < dwCount; dwItem++)
     {
+      info = getItemInfo(dwItem);
+
       itemValueList.push_back(make_unique<ItemValue>(
-        ItemValue{ phClientItems[dwItem], pvValues[dwItem], pwQualities[dwItem] & OPC_QUALITY_MASK }
+        ItemValue{ info.handle , pvValues[dwItem], pwQualities[dwItem] & OPC_QUALITY_MASK }
       ));
     }
-
-    msg << ">> Items were changed. Total: " << itemValueList.size() << endl;
-    logger(msg.str());
 
     changeHandler(itemValueList);
 

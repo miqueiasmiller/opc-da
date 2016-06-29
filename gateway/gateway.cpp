@@ -6,11 +6,14 @@
 
 #include "targetver.h"
 #include "opc_client.h"
+#include "opc_utils.h"
 
 using namespace opc;
 using namespace std;
 
 bool verboseEnable = false;
+
+vector<unique_ptr<ItemValue>> actualValues;
 
 void setupOptions(int argc, char * argv[])
 {
@@ -24,6 +27,7 @@ void setupOptions(int argc, char * argv[])
   }
 }
 
+
 void gatewayLog(const string & msg)
 {
   if (verboseEnable)
@@ -36,7 +40,7 @@ void connectCommand(OPCClient & opc)
   string serverName;
 
   cout << "Enter the OPC Server name: ";
-  cin >> serverName;
+  getline(cin, serverName);
 
   opc.Connect(serverName);
 }
@@ -47,7 +51,7 @@ void disconnectCommand(OPCClient & opc)
   string response;
 
   cout << "Enter (y) if you really wants to disconnect. ";
-  cin >> response;
+  getline(cin, response);
 
   if (response == "y")
     opc.Disconnect();
@@ -67,18 +71,11 @@ void addServer211Items(OPCClient & opc)
 }
 
 
-void readItem(OPCClient & opc, vector<string> const & tokens)
+VARIANT readItem(OPCClient & opc, string itemId)
 {
-  if (tokens.size() < 2)
-  {
-    cout << "Invalid write command." << endl;
-    return;
-  }
-
   ItemInfo item;
-  string id = tokens[1];
 
-  HRESULT hr = opc.GetItemInfo(id, item);
+  HRESULT hr = opc.GetItemInfo(itemId, item);
 
   if (hr == S_OK)
   {
@@ -89,9 +86,42 @@ void readItem(OPCClient & opc, vector<string> const & tokens)
 
     if (hr == S_OK)
     {
-      cout << "Fazer o parser do valor lido." << endl;
+      return value.value;
     }
   }
+}
+
+
+void readItem(OPCClient & opc, vector<string> const & tokens)
+{
+  if (tokens.size() < 2)
+  {
+    cout << "Invalid write command." << endl;
+    return;
+  }
+
+  string id = tokens[1];
+
+  VARIANT v = readItem(opc, id);
+
+  string result = fromVARIANT(v);
+
+  cout << result << endl;
+}
+
+
+HRESULT writeItem(OPCClient & opc, string itemId, VARIANT & value)
+{
+  ItemInfo item;
+
+  HRESULT hr = opc.GetItemInfo(itemId, item);
+
+  if (hr == S_OK)
+  {
+    hr = opc.Write(item, value);
+  }
+
+  return hr;
 }
 
 
@@ -105,26 +135,44 @@ HRESULT writeItem(OPCClient & opc, vector<string> const & tokens)
 
   string itemId = tokens[1];
   string value = tokens[2];
-  ItemInfo item;
 
-  HRESULT hr = opc.GetItemInfo(itemId, item);
+  VARIANT v;
+  VariantInit(&v);
+  v.vt = VT_I4;
+  v.intVal = stoi(value);
+
+  HRESULT hr = writeItem(opc, itemId, v);
 
   if (hr == S_OK)
-  {
-    VARIANT v;
-    v.intVal = stoi(value);
-
-    hr = opc.Write(item, v);
-  }
+    cout << "Success" << endl;
+  else
+    cout << "Fail (" << hr << ")" << endl;
 }
 
 
-void openSocket(OPCClient const & opc, vector<string> const & tokens)
+void openSocket(OPCClient & opc, vector<string> const & tokens)
 {
   int maxThreads = 1;
 
   if (tokens.size() == 2)
     maxThreads = stoi(tokens[1]);
+}
+
+
+HRESULT groupManager(OPCClient & opc, vector<string> const & tokens)
+{
+  if (tokens.size() == 2)
+  {
+    string option = tokens[1];
+
+    if (option == "activate")
+      return opc.SetGroupState(true);
+
+    if (option == "deactivate")
+      return opc.SetGroupState(false);
+  }
+
+  return S_FALSE;
 }
 
 
@@ -135,7 +183,7 @@ void commandLoop(OPCClient & opc)
   do
   {
     cout << "Enter a command: ";
-    cin >> cmd;
+    getline(cin, cmd);
 
     istringstream iss(cmd);
     copy(istream_iterator<string>(iss), istream_iterator<string>(), back_inserter(tokens));
@@ -150,6 +198,8 @@ void commandLoop(OPCClient & opc)
       readItem(opc, tokens);
     else if (tokens[0] == "write")
       writeItem(opc, tokens);
+    else if (tokens[0] == "group")
+      groupManager(opc, tokens);
     else if (tokens[0] == "open_socket")
       openSocket(opc, tokens);
 
@@ -158,6 +208,37 @@ void commandLoop(OPCClient & opc)
   } while (cmd != "quit");
 }
 
+
+void dataChangeCallback(vector<unique_ptr<ItemValue>> const & data)
+{
+  vector<unique_ptr<ItemValue>> changed;
+
+  for (auto d = data.begin(); d != data.end(); ++d)
+  {
+    //auto a = find(actualValues.begin(), actualValues.end(), *d);
+    auto a = find_if(actualValues.begin(), actualValues.end(), [&](unique_ptr<ItemValue> const & obj) {
+      return  obj->handle == (*d)->handle;
+    });
+
+
+    // if found in the actual values
+    if (a != actualValues.end())
+    {
+      ULONG res = VarCmp(&(*a)->value, &(*d)->value, 0);
+
+      if (res == VARCMP_GT || res == VARCMP_LT)
+      {
+        (*a)->value = (*d)->value;
+      }
+    }
+    else
+    {
+      // its a new item
+      changed.push_back(make_unique<ItemValue>(ItemValue{ (*d)->handle, (*d)->value, (*d)->quality }));
+      actualValues.push_back(make_unique<ItemValue>(ItemValue{ (*d)->handle, (*d)->value, (*d)->quality }));
+    }
+  }
+}
 
 int main(int argc, char * argv[])
 {
@@ -168,7 +249,8 @@ int main(int argc, char * argv[])
 
   try
   {
-    unique_ptr<OPCClient> opc = make_unique<OPCClient>(gatewayLog);
+    unique_ptr<OPCClient> opc = make_unique<OPCClient>(gatewayLog, dataChangeCallback);
+    //unique_ptr<OPCClient> opc = make_unique<OPCClient>(gatewayLog);
 
     // criar ponto de conexão TCP e disparar uma nova thread a cada conexão
 

@@ -24,12 +24,15 @@ namespace opc
     DWORD refCounter;
     LogHandler logger;
     DataChangeHandler changeHandler;
+    GetItemInfoHandler getItemInfo;
 
     static mutex onDataChangeMtx;
 
   public:
-    OPCDataCallback(LogHandler logFunc, DataChangeHandler onDataChange);
+    OPCDataCallback(LogHandler logFunc, DataChangeHandler onDataChange, GetItemInfoHandler itemInfoHandler);
     ~OPCDataCallback();
+
+    DWORD getCountRef();
 
     /* IUnknown Methods */
 

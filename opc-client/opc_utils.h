@@ -6,6 +6,8 @@
 #define OPCCLIENT_API __declspec(dllimport)
 #endif
 
+#include <comdef.h>
+#include <comutil.h>
 #include <functional>
 #include <string>
 #include "opcda.h"
@@ -27,16 +29,34 @@ namespace opc
     DWORD quality;
   };
 
+  inline bool operator ==(ItemValue const & lhs, ItemValue const & rhs)
+  {
+    return lhs.handle == rhs.handle;
+  }
+
+
   struct OPCCLIENT_API ItemInfo
   {
     string id;
     OPCHANDLE handle;
     VARENUM dataType;
+    int index;
   };
+
+  inline bool operator ==(ItemInfo const & lhs, ItemInfo const & rhs)
+  {
+    return lhs.handle == rhs.handle && lhs.id == rhs.id;
+  }
+
 
   typedef function<void(string const &)> LogHandler;
 
+
   typedef function<void(vector<unique_ptr<ItemValue>> const &)> DataChangeHandler;
+
+
+  typedef function<ItemInfo(size_t)> GetItemInfoHandler;
+
 
   static wchar_t * convertMBSToWCS(char const * value){
     size_t newSize = strlen(value) + 1;
@@ -48,4 +68,11 @@ namespace opc
 
     return converted;
   };
+
+  
+  static string fromVARIANT(VARIANT & vr)
+  {
+    _bstr_t bt(vr);
+    return string(static_cast<char *>(bt));
+  }
 }

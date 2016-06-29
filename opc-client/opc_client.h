@@ -22,6 +22,9 @@ using namespace std;
 
 namespace opc
 {
+  // controls if the COM was initialized...
+  bool comInitialized;
+
   class OPCCLIENT_API OPCClient {
   private:
 
@@ -31,12 +34,16 @@ namespace opc
     // logger function...
     LogHandler logger;
 
+    // data change function...
+    DataChangeHandler dataChangeFunc;
+
     // only allows one group and this is the reference to it...
     unique_ptr<Group> group;
 
     // the items collection. All added items will have its handle stored here...
     // must update to use a multi indexed container like boost::multi_index
     unordered_map<string, ItemInfo> itemsById;
+    vector<ItemInfo> itemsVector;
 
     // connection poiter used when monitoring changes on the items...
     unique_ptr<IConnectionPoint> connPoint;
@@ -49,6 +56,7 @@ namespace opc
 
     // data callback class...
     unique_ptr<OPCDataCallback> dataCallback;
+    //OPCDataCallback dataCallback;
 
     // retrieves an IUnknown instance of opc-da server...
     IOPCServer * GetOPCServer(string const & serverName);
@@ -69,11 +77,14 @@ namespace opc
     HRESULT OPCClient::InternalRemoveItem(OPCHANDLE const & handle);
 
     // this functions is called every time when one or more items's values are changed... 
-    void OPCClient::OnDataChanged(vector<unique_ptr<ItemValue>> const & changedItems);
+    //void OPCClient::OnDataChanged(vector<unique_ptr<ItemValue>> const & changedItems);
 
   public:
     // destructor...
     ~OPCClient();
+
+    // constructor...
+    OPCClient::OPCClient(LogHandler logFunc, DataChangeHandler dataChangeFunc);
 
     // constructor...
     OPCClient(LogHandler logger);
@@ -103,13 +114,16 @@ namespace opc
     HRESULT Write(ItemInfo const & item, VARIANT & value);
 
     // starts monitoring data changes...
-    HRESULT OPCClient::SetDataCallback();
+    HRESULT SetDataCallback();
 
     // stops monitoring data changes...
-    HRESULT OPCClient::UnsetDataCallback();
+    HRESULT UnsetDataCallback();
 
     // sets the group activated...
-    HRESULT OPCClient::SetGroupState(bool active);
+    HRESULT SetGroupState(bool active);
+
+    // gets the item info based on index...
+    ItemInfo GetItemInfoByIndex(size_t index);
 
     // initializes COM...
     static void Initialize(void);

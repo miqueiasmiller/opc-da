@@ -18,6 +18,11 @@ namespace opc
   }
 
 
+  OPCClient::OPCClient(LogHandler logFunc, DataChangeHandler dataChangeFunc) : opcServer(nullptr), logger(logFunc), dwCookie(0), connected(false), dataChangeFunc(dataChangeFunc)
+  {
+  }
+
+
   void OPCClient::Connect(string const & serverName)
   {
     if (connected)
@@ -30,6 +35,9 @@ namespace opc
     // gets an instance of the item management group...
     logger(">> Adding the Item Management Group to the server.\r\n");
     group = AddGroup(opcServer, 1000);
+
+    // sets the callback for monitoring changes in the items's data.
+    SetDataCallback();
 
     connected = true;
   }
@@ -51,8 +59,8 @@ namespace opc
     // releases the data callback object...
     if (dataCallback)
       dataCallback->Release();
-
-    //TODO - Verificar a contagem de referencias do dataCallback
+    /*if (dataCallback != nullptr)
+      dataCallback.Release();*/
 
     // removes all added items...
     RemoveAllItems();
@@ -189,7 +197,11 @@ namespace opc
       addedInfo.dataType = (VARENUM)result[0].vtCanonicalDataType;
 
       // adds the item handle to the map...
+      itemsVector.push_back(addedInfo);
+      addedInfo.index = itemsVector.size() - 1;
+
       itemsById.emplace(itemId, addedInfo);
+
 
       msg << ">> Item " << itemId << " added to the group. Handler: " << addedInfo.handle << endl;
       //sprintf(msg, ">> Item %s added to the group. Code: %x\r\n", itemId, hr);
@@ -241,6 +253,13 @@ namespace opc
         msg << ">> Item '" << it->second.id << "' was removed from the group. Handle: " << it->second.handle << endl;
         logger(msg.str());
 
+        auto v = find_if(itemsVector.begin(), itemsVector.end(), [&](ItemInfo const & inf) { 
+          return inf.handle == it->second.handle && inf.id == it->second.id;
+        });
+
+        if (v != itemsVector.end())
+          itemsVector.erase(v);
+
         it = itemsById.erase(it);
       }
       else
@@ -285,6 +304,13 @@ namespace opc
 
     if (hr = InternalRemoveItem(toRemove.handle) == S_OK)
     {
+      auto v = find_if(itemsVector.begin(), itemsVector.end(), [&](ItemInfo const & inf) {
+        return inf.handle == item.handle && inf.id == item.id;
+      });
+
+      if (v != itemsVector.end())
+        itemsVector.erase(v);
+
       itemsById.erase(item.id);
     }
     else
@@ -429,15 +455,6 @@ namespace opc
   }
 
 
-  void OPCClient::OnDataChanged(vector<unique_ptr<ItemValue>> const & changedItems)
-  {
-    ostringstream msg;
-
-    msg << "GOT IT!!! Callback called. Items changed: " << changedItems.size() << endl;
-    logger(msg.str());
-  }
-
-
   HRESULT OPCClient::SetDataCallback()
   {
     ostringstream msg;
@@ -458,7 +475,7 @@ namespace opc
 
     // Call the IConnectionPointContainer::FindConnectionPoint method on the
     // group object to obtain a Connection Point
-    IConnectionPoint * cp = connPoint.get();
+    IConnectionPoint * cp = nullptr;
     hr = cpc->FindConnectionPoint(IID_IOPCDataCallback, &cp);
     if (hr != S_OK)
     {
@@ -468,10 +485,13 @@ namespace opc
       return hr;
     }
 
+    connPoint.reset(cp);
 
     // Now set up the Connection Point.
-    dataCallback = make_unique<OPCDataCallback>(logger, bind(&OPCClient::OnDataChanged, this, placeholders::_1));
+    dataCallback = make_unique<OPCDataCallback>(logger, dataChangeFunc, bind(&OPCClient::GetItemInfoByIndex, this, placeholders::_1));
     dataCallback->AddRef();
+    /*dataCallback = new OPCDataCallback(logger, dataChangeFunc, bind(&OPCClient::GetItemInfoByIndex, this, placeholders::_1));
+    dataCallback.AddRef();*/
     hr = connPoint->Advise(dataCallback.get(), &dwCookie);
     if (hr != S_OK)
     {
@@ -555,21 +575,42 @@ namespace opc
   }
 
 
+  ItemInfo OPCClient::GetItemInfoByIndex(size_t index)
+  {
+    return itemsVector.at(index);
+  }
+
+
   void OPCClient::Initialize(void)
   {
     // Initializes Microsoft COM library...
+    HRESULT hr;
 
     // Forces STA (single thread apartment)
-    //CoInitialize(NULL);
+    //hr = CoInitialize(NULL);
 
     // Forces MTA (multi thread apartment)
-    CoInitializeEx(NULL, COINIT_MULTITHREADED);
+    hr = CoInitializeEx(NULL, COINIT_MULTITHREADED);
+
+    if (hr == S_OK || hr == S_FALSE)
+      comInitialized = true;
+    else if (hr == RPC_E_CHANGED_MODE)
+      comInitialized = false;
+    else
+      comInitialized = false;
   }
 
 
   void OPCClient::Uninitialize(void)
   {
     // Closes Microsoft COM library...
-    CoUninitialize();
+    try
+    {
+      if (comInitialized)
+        CoUninitialize();
+    }
+    catch (exception & e)
+    {
+    }
   }
 }
