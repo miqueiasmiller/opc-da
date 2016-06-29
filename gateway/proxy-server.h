@@ -18,7 +18,7 @@ static unsigned const POOL_SIZE = 30;
 class ProxyServer
 {
 public:
-  ProxyServer(int const &, function<string(string const & itemId)>, function<bool(string const & itemId, string value)>);
+  ProxyServer(int const &, function<string(string const & itemId)>, function<bool(string const & itemId, string value)>, function<string()> changedFnHandler);
   ~ProxyServer();
   void start();
 
@@ -34,6 +34,7 @@ private:
 
   function<string(string const & itemId)> readFunc;
   function<bool(string const & itemId, string value)> writeFunc;
+  function<string()> changedFunc;
 
   void session(boost::asio::ip::tcp::socket *);
   std::string read_request(boost::asio::ip::tcp::socket *);

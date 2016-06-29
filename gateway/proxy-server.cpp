@@ -1,12 +1,13 @@
 #include "proxy-server.h"
 
-ProxyServer::ProxyServer(int const & port, function<string(string const & itemId)>readFnHandler, function<bool(string const & itemId, string value)> writeFnHandler) :
+ProxyServer::ProxyServer(int const & port, function<string(string const & itemId)>readFnHandler, function<bool(string const & itemId, string value)> writeFnHandler, function<string()> changedFnHandler) :
 tcp_service(),
 worker_service(),
 tcp_acceptor(tcp_service, boost::asio::ip::tcp::endpoint(boost::asio::ip::tcp::v4(), port)),
 worker(worker_service),
 readFunc(readFnHandler),
-writeFunc(writeFnHandler)
+writeFunc(writeFnHandler),
+changedFunc(changedFnHandler)
 {
   available_connections = POOL_SIZE;
 
@@ -136,6 +137,11 @@ void ProxyServer::process_request(boost::asio::ip::tcp::socket * socket, std::st
 
       bool res = writeFunc(tokens[1], tokens[2]);
       socket->write_some(boost::asio::buffer(res ? string("WRITE_OK") : string("WRITE_FAIL")));
+    }
+    else if (tokens[0] == "GETCHANGED")
+    {
+      string res = changedFunc();
+      socket->write_some(boost::asio::buffer(res));
     }
     else
     {

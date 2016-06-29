@@ -73,6 +73,40 @@ void addServer211Items(OPCClient & opc)
 }
 
 
+void addServer215Items(OPCClient & opc)
+{
+  ItemInfo info;
+  string id;
+
+  for (size_t i = 1; i <= 8; i++)
+  {
+    if (i <= 2)
+    {
+      id = "Leitura.Analog" + to_string(i);
+      opc.AddItem(id, VARENUM::VT_I4, info);
+
+      id = "Escrita.Analog" + to_string(i);
+      opc.AddItem(id, VARENUM::VT_I4, info);
+    }
+    
+    if (i <= 5)
+    {
+      id = "Leitura.Digit" + to_string(i);
+      opc.AddItem(id, VARENUM::VT_I4, info);
+
+      id = "Escrita.Digit" + to_string(i);
+      opc.AddItem(id, VARENUM::VT_I4, info);
+    }
+
+    if (i >= 6)
+    {
+      id = "Escrita.Digit" + to_string(i);
+      opc.AddItem(id, VARENUM::VT_I4, info);
+    }
+  }
+}
+
+
 VARIANT readItem(OPCClient & opc, string const & itemId)
 {
   ItemInfo item;
@@ -222,6 +256,8 @@ void commandLoop(OPCClient & opc)
       disconnectCommand(opc);
     else if (tokens[0] == "add_211")
       addServer211Items(opc);
+    else if (tokens[0] == "add_215")
+      addServer215Items(opc);
     else if (tokens[0] == "read")
       readItem(opc, tokens);
     else if (tokens[0] == "write")
@@ -236,10 +272,11 @@ void commandLoop(OPCClient & opc)
   } while (cmd != "quit");
 }
 
-
+vector<unique_ptr<ItemValue>> changed;
+boost::mutex dataChangedMtx;
 void dataChangeCallback(vector<unique_ptr<ItemValue>> const & data)
 {
-  vector<unique_ptr<ItemValue>> changed;
+  boost::unique_lock<boost::mutex> lock(dataChangedMtx);
 
   for (auto d = data.begin(); d != data.end(); ++d)
   {
@@ -269,9 +306,25 @@ void dataChangeCallback(vector<unique_ptr<ItemValue>> const & data)
 }
 
 
-void initProxyAsync(function<string(string const & itemId)> readFn, function<bool(string const & itemId, string value)> writeFn)
+string getChangedDataProxyFn()
 {
-  ProxyServer proxy(9002, readFn, writeFn);
+  boost::unique_lock<boost::mutex> lock(dataChangedMtx);
+
+  ostringstream response;
+  response << "CHANGED_ITEMS!";
+
+  for (auto it = changed.begin(); it != changed.end(); ++it)
+  {
+    response << (*it)->handle << "," << fromVARIANT((*it)->value) << "|";
+  }
+
+  return response.str();
+}
+
+
+void initProxyAsync(function<string(string const & itemId)> readFn, function<bool(string const & itemId, string value)> writeFn, function<string()> changedFn)
+{
+  ProxyServer proxy(9002, readFn, writeFn, changedFn);
   proxy.start();
 }
 
@@ -294,7 +347,9 @@ int main(int argc, char * argv[])
 
       function<bool(string const & itemId, string value)> writeFnHandler = [&](string const & itemId, string value) -> bool { return writeItemProxyFn(*opc, itemId, value); };
 
-      boost::thread proxyThread(&initProxyAsync, readFnHandler, writeFnHandler);
+      function<string()> changedFnHandler = []()-> string { return getChangedDataProxyFn(); };
+
+      boost::thread proxyThread(&initProxyAsync, readFnHandler, writeFnHandler, changedFnHandler);
 
       commandLoop(*opc);
 
