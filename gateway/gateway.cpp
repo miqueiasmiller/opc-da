@@ -73,7 +73,7 @@ void addServer211Items(OPCClient & opc)
 }
 
 
-VARIANT readItem(OPCClient & opc, string & const itemId)
+VARIANT readItem(OPCClient & opc, string const & itemId)
 {
   ItemInfo item;
 
@@ -116,8 +116,7 @@ string readItemProxyFn(OPCClient & opc, string const & itemId)
 {
   boost::unique_lock<boost::mutex> lock(readMtx);
 
-  string a;
-  VARIANT v = readItem(opc, a); // readItem(opc, itemId);
+  VARIANT v = readItem(opc, itemId);
 
   return fromVARIANT(v);
 }
@@ -211,7 +210,7 @@ void commandLoop(OPCClient & opc)
   vector<string> tokens;
   do
   {
-    cout << "Enter a command: ";
+    cout << "Enter a command: " << endl;
     getline(cin, cmd);
 
     istringstream iss(cmd);
@@ -299,7 +298,7 @@ int main(int argc, char * argv[])
 
       commandLoop(*opc);
 
-      proxyThread.join();
+      proxyThread.interrupt();
     }
 
     gatewayLog("Uninitializing COM.\r\n");

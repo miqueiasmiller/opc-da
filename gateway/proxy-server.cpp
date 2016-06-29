@@ -119,28 +119,49 @@ void ProxyServer::process_request(boost::asio::ip::tcp::socket * socket, std::st
 {
   vector<string>tokens;
 
-  istringstream iss(message);
-  copy(istream_iterator<string>(iss), istream_iterator<string>(), back_inserter(tokens));
+  tokenizer(const_cast<string &>(message), tokens);
 
-  std::cout << "Application Server - Message received from " << socket->remote_endpoint() << " - Message: " << message << std::endl;
-
-  if (tokens.size() >= 0)
+  if (tokens.size() > 0)
   {
     if (tokens[0] == "READ" && tokens.size() > 1)
     {
+      std::cout << "Application Server - Message received from " << socket->remote_endpoint() << " - Message: " << message << std::endl;
+
       string res = readFunc(tokens[1]);
       socket->write_some(boost::asio::buffer(res));
     }
     else if (tokens[0] == "WRITE" && tokens.size() > 2)
     {
+      std::cout << "Application Server - Message received from " << socket->remote_endpoint() << " - Message: " << message << std::endl;
+
       bool res = writeFunc(tokens[1], tokens[2]);
       socket->write_some(boost::asio::buffer(res ? string("WRITE_OK") : string("WRITE_FAIL")));
     }
     else
     {
+      std::cout << "Application Server - Message received from " << socket->remote_endpoint() << " - Message: " << message << std::endl;
+
       socket->write_some(boost::asio::buffer(string("INVALID")));
     }
   }
+}
+
+void ProxyServer::tokenizer(std::string & message, std::vector<std::string> & tokens)
+{
+  std::string delimiter = "|";
+
+  size_t pos = 0;
+  std::string tok;
 
   tokens.clear();
+
+  while ((pos = message.find(delimiter)) != std::string::npos)
+  {
+    tok = message.substr(0, pos);
+    tokens.push_back(tok);
+    message.erase(0, pos + delimiter.length());
+  }
+
+  if (message.length() > 0)
+    tokens.push_back(message);
 }

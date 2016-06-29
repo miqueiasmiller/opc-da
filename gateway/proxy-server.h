@@ -40,4 +40,6 @@ private:
   void process_request(boost::asio::ip::tcp::socket *, std::string const &);
   void start_threadpool();
   void check_connections_pool();
+
+  void tokenizer(std::string & message, std::vector<std::string> & tokens);
 };
